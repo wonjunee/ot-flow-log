@@ -1,0 +1,9 @@
+# Specify filepatterns you want git to ignore.
+
+*.png
+*.pyc
+logs
+*.pth
+*.mp4
+*.DS_Store
+*.csv
