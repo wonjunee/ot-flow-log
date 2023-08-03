@@ -147,7 +147,7 @@ if __name__ == '__main__':
         checkpt  = torch.load(filename, map_location=lambda storage, loc: storage)
         net1     = Phi(nTh=nTh, m=m, d=d, alph=alph)
         prec1    = checkpt['state_dict']['A'].dtype
-        net1     = net.to(prec1).to(device)
+        net1     = net1.to(prec1).to(device)
         net1.load_state_dict(checkpt['state_dict'])
         net_list.append(net1)
 
@@ -233,10 +233,8 @@ if __name__ == '__main__':
             h = 1.0 / nt
 
             # initialize "hidden" vector to propogate with all the additional dimensions for all the ODEs
-            z = pad(x0, (0, 3, 0, 0), value=0)
-
-            d = z.shape[1]-3 # dimension for x
-
+            # z = pad(x0, (0, 3, 0, 0), value=0)
+            z = torch.zeros((x0.shape[0], d+3)) ; z[:,:d] = x0
             # get the inital density from net_list. Given an initial density at t=0, iterate through n_tau - 1
             rho_next = rho
             with torch.no_grad(): 
@@ -246,8 +244,8 @@ if __name__ == '__main__':
                         z = stepRK4(odefun, z, net_list[n], alph, tk, tk + h)
                         tk += h
                         rho_next = rho_next / torch.exp(z[:,d])
-
-                    z = pad(z[:,0:d], (0,3,0,0), value=0)
+                    # z = pad(z[:,0:d], (0,3,0,0), value=0)
+                    z[:,d:] = 0
 
         optim.zero_grad()
         loss, costs  = compute_loss_gf(net, x0, nt=nt, n_tau=n_tau, net_list=net_list, rho=rho, z=z)
