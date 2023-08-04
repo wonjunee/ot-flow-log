@@ -57,9 +57,10 @@ def get_samples_next_time_step_including_det(x, rho, net, net_list, nt, n_tau, s
             for k in range(nt):
                 z = stepRK4(odefun, z, net_list[n], alph, tk, tk + h)
                 tk += h
-                rho_next = rho_next / torch.exp(z[:,d])
-
-            z = pad(z[:,0:d], (0,3,0,0), value=0)
+                # rho_next = rho_next / torch.exp(z[:,d])
+            # z = pad(z[:,0:d], (0,3,0,0), value=0)
+            rho_next = torch.exp(z[:,d])
+            z[:,d:] = 0
         tk = 0
         for k in range(nt):
             z = stepRK4(odefun, z, net, alph, tk, tk + h)
@@ -159,14 +160,14 @@ def multiple_exp(Tx):
                          + torch.exp(-torch.sum((Tx-pos4)**2, dim=1)/(2 * 0.5**2)) )
 
 def compute_U(rho_next, Tx=None):
-    # return rho_next.square()
+    return rho_next**2
     # return rho_next.square() + 0.1 * rho_next * ( torch.log(rho_next) )
-    if Tx != None:
-        return rho_next * ( torch.log(rho_next) - torch.log(multiple_exp(Tx) + 1e-5) - 1 )
-    else:
-        return rho_next * ( torch.log(rho_next) - 1 )
+    # if Tx != None:
+    #     return rho_next * ( torch.log(rho_next) - torch.log(multiple_exp(Tx) + 1e-5) - 1 )
+    # else:
+    #     return rho_next * ( torch.log(rho_next) - 1 )
 
-def OTFlowProblemGradientFlowsPorous(x, rho, Phi, tspan , nt, n_tau, net_list, stepper="rk4", alph =[1.0,1.0,1.0], z=None):
+def OTFlowProblemGradientFlowsPorous(x, rho, Phi, tspan , nt, tau, n_tau, net_list, stepper="rk4", alph =[1.0,1.0,1.0], z=None):
     """
 
     Evaluate objective function of OT Flow problem; see Eq. (8) in the paper.
@@ -230,7 +231,8 @@ def OTFlowProblemGradientFlowsPorous(x, rho, Phi, tspan , nt, n_tau, net_list, s
     #     print("z:", torch.max(z[:,d].exp()), torch.min(z[:,d].exp()))
 
     # rho_next = rho_next / torch.exp(z[:,d])
-    rho_next = torch.exp(torch.log(rho) - z[:,d] ) + 1e-5
+    # rho_next = torch.exp(torch.log(rho) - z[:,d] ) + 1e-4
+    rho_next = torch.exp(z[:,d])
 
     cost1 = (compute_U(rho_next,Tx) / (rho_next)).mean()
     # cost2 = - torch.exp( - (Tx.view((n, 1, d)) - Tx.view((1, n, d))).square().mean(dim = 2) ).mean() / math.pi
@@ -242,79 +244,12 @@ def OTFlowProblemGradientFlowsPorous(x, rho, Phi, tspan , nt, n_tau, net_list, s
     # torch.mean(C(z)): log det cost
     costL  = torch.mean(z[:,-2])
     # costC  = terminal_cost + torch.mean(C(z))
-    tau = 0.025
     costC  = terminal_cost * tau
     # costR  = torch.mean(z[:,-1])
     costR = 0
 
     cs = [costL, costC, costR]
     return sum(i[0] * i[1] for i in zip(cs, alph)) , cs
-
-
-
-def OTFlowProblem(x, Phi, tspan , nt, stepper="rk4", alph =[1.0,1.0,1.0] ):
-    """
-
-    Evaluate objective function of OT Flow problem; see Eq. (8) in the paper.
-
-    :param x:       input data tensor nex-by-d
-    :param Phi:     neural network
-    :param tspan:   time range to integrate over, ex. [0.0 , 1.0]
-    :param nt:      number of time steps
-    :param stepper: string "rk1" or "rk4" Runge-Kutta schemes
-    :param alph:    list of length 3, the alpha value multipliers
-    :return:
-        Jc - float, objective function value dot(alph,cs)
-        cs - list length 5, the five computed costs
-    """
-    h = (tspan[1]-tspan[0]) / nt
-
-    # initialize "hidden" vector to propogate with all the additional dimensions for all the ODEs
-    z = pad(x, (0, 3, 0, 0), value=0)
-
-    tk = tspan[0]
-
-    if stepper=='rk4':
-        for k in range(nt):
-            z = stepRK4(odefun, z, Phi, alph, tk, tk + h)
-            tk += h
-    elif stepper=='rk1':
-        for k in range(nt):
-            z = stepRK1(odefun, z, Phi, alph, tk, tk + h)
-            tk += h
-
-    d = z.shape[1]-3 # dimension for x
-
-    # terminal_cost =  -( torch.sum(  -0.5 * math.log(2*math.pi) - torch.pow(z[:,0:d] - 3,2) / 2  , 1 , keepdims=True ) ).mean()
-
-    # interaction cost
-    n  = z.shape[0]
-    Tx = z[:,0:d]
-
-    normx2 = (Tx.view((n, 1, d)) - Tx.view((1, n, d))).square().mean(dim = 2)
-    # print((normx2.sqrt() + 1e-6))
-    terminal_cost = (normx2 - (normx2 + 1e-8).log()).mean()/2
-    # terminal_cost = normx2.mean()/2
-
-
-    # terminal_cost =  -( torch.sum( - torch.pow(z[:,0:d] - 3,2) / 2  , 1 , keepdims=True ) ).mean()
-    # terminal_cost =  -( torch.sum(  -0.5 * math.log(2*math.pi) + torch.log( torch.exp(- torch.pow(z[:,0:d] - 3,2) / 2) + torch.exp(- torch.pow(z[:,0:d] + 3,2) / 2))   , 1 , keepdims=True ) ).mean()
-    # ASSUME all examples are equally weighted
-
-    # torch.mean(C(z)): log det cost
-    costL  = torch.mean(z[:,-2])
-    # costC  = terminal_cost + torch.mean(C(z))
-    tau = 0.1
-    costC  = terminal_cost  * tau
-    # costR  = torch.mean(z[:,-1])
-    costR = 0
-
-    cs = [costL, costC, costR]
-
-    # return dot(cs, alph)  , cs
-    return sum(i[0] * i[1] for i in zip(cs, alph)) , cs
-
-
 
 def stepRK4(odefun, z, Phi, alph, t0, t1):
     """

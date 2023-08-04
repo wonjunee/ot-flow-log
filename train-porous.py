@@ -25,6 +25,7 @@ parser.add_argument(
 
 parser.add_argument("--nt"    , type=int, default=1, help="number of time steps")
 parser.add_argument("--nt_val", type=int, default=1, help="number of time steps for validation")
+parser.add_argument("--tau", type=float, default=0.01, help="the time stepsize for the outer JKO iteration")
 parser.add_argument('--alph'  , type=str, default='1.0,1.0,0.0')
 parser.add_argument('--m'     , type=int, default=64)
 parser.add_argument('--nTh'   , type=int, default=3)
@@ -61,6 +62,10 @@ else:
 # get timestamp for saving models
 start_time = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 
+save_folder = args.save
+os.makedirs(save_folder, exist_ok=True)
+os.makedirs(f"{args.save}/figs", exist_ok=True)
+
 # logger
 utils.makedirs(args.save)
 # logger = utils.get_logger(logpath=os.path.join(args.save, 'logs'), filepath=os.path.abspath(__file__))
@@ -75,8 +80,8 @@ def compute_loss(net, x, nt):
     Jc , cs = OTFlowProblem(x, net, [0,1], nt=nt, stepper="rk4", alph=net.alph)
     return Jc, cs
 
-def compute_loss_gf(net, x, nt, n_tau, net_list, rho, z):
-    Jc , cs = OTFlowProblemGradientFlowsPorous(x, rho, net, [0,1], nt=nt, n_tau=n_tau, net_list=net_list, stepper="rk4", alph=net.alph, z=z)
+def compute_loss_gf(net, x, nt, tau, n_tau, net_list, rho, z):
+    Jc , cs = OTFlowProblemGradientFlowsPorous(x, rho, net, [0,1], nt=nt, tau=tau, n_tau=n_tau, net_list=net_list, stepper="rk4", alph=net.alph, z=z)
     return Jc, cs
 
 def plot_scatter(x_next, args, n_tau, sPath):
@@ -129,6 +134,7 @@ if __name__ == '__main__':
     alph   = args.alph
     nt     = args.nt
     nt_val = args.nt_val
+    tau    = args.tau
     nTh    = args.nTh
     m      = args.m
     net = Phi(nTh=nTh, m=args.m, d=d, alph=alph)
@@ -184,7 +190,7 @@ if __name__ == '__main__':
     # print(net)
     print("-------------------------")
     print("DIMENSION={:}  m={:}  nTh={:}   alpha={:}".format(d,m,nTh,alph))
-    print("nt={:}   nt_val={:}   n_tau={:}".format(nt,nt_val,n_tau))
+    print("nt={:}   nt_val={:}   tau={:}  n_tau={:}".format(nt,nt_val,tau,n_tau))
     print("Number of trainable parameters: {}".format(count_parameters(net)))
     print("-------------------------")
     print(str(optim)) # optimizer info
@@ -243,12 +249,13 @@ if __name__ == '__main__':
                     for k in range(nt):
                         z = stepRK4(odefun, z, net_list[n], alph, tk, tk + h)
                         tk += h
-                        rho_next = rho_next / torch.exp(z[:,d])
+                        # rho_next = rho_next / torch.exp(z[:,d])
+                        rho_next = torch.exp(z[:,d])
                     # z = pad(z[:,0:d], (0,3,0,0), value=0)
                     z[:,d:] = 0
 
         optim.zero_grad()
-        loss, costs  = compute_loss_gf(net, x0, nt=nt, n_tau=n_tau, net_list=net_list, rho=rho, z=z)
+        loss, costs  = compute_loss_gf(net, x0, nt=nt, tau=tau, n_tau=n_tau, net_list=net_list, rho=rho, z=z)
         loss.backward()
         optim.step()
 
@@ -279,8 +286,6 @@ if __name__ == '__main__':
                 var  = torch.var(x_next)
 
                 print(f"mean = {mean} variance = {var}")
-
-                z1 = pad(x_next, (0, 1, 0, 0), value=1) # concatenate with the time t
                 plot_scatter_color(x_next, args, n_tau, rho_next, sPath = os.path.join(args.save, 'figs', f"rho_{n_tau+1}.png"))
 
                 t0  = 0.001
@@ -350,8 +355,6 @@ if __name__ == '__main__':
                 mean = torch.mean(x_next, dim=0)
                 var  = torch.var(x_next)
                 x_next, rho_next = get_samples_next_time_step_including_det(x0val, rhoval, net, net_list, nt, n_tau)
-                z1 = pad(x_next, (0, 1, 0, 0), value=1) # concatenate with the time t
-                rho_next_from_phi = net.forward(x=z1)
                 plot_scatter_color(x_next, args, n_tau, rho_next, sPath = os.path.join(args.save, 'figs', f'n_tau_{n_tau}_itr_{itr}.png'))
 
         # shrink step size
