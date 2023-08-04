@@ -249,8 +249,7 @@ if __name__ == '__main__':
                     for k in range(nt):
                         z = stepRK4(odefun, z, net_list[n], alph, tk, tk + h)
                         tk += h
-                        # rho_next = rho_next / torch.exp(z[:,d])
-                        rho_next = torch.exp(z[:,d])
+                        rho_next = rho_next / torch.exp(z[:,d])
                     # z = pad(z[:,0:d], (0,3,0,0), value=0)
                     z[:,d:] = 0
 

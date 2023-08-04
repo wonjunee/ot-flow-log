@@ -57,10 +57,8 @@ def get_samples_next_time_step_including_det(x, rho, net, net_list, nt, n_tau, s
             for k in range(nt):
                 z = stepRK4(odefun, z, net_list[n], alph, tk, tk + h)
                 tk += h
-                # rho_next = rho_next / torch.exp(z[:,d])
-            # z = pad(z[:,0:d], (0,3,0,0), value=0)
-            rho_next = torch.exp(z[:,d])
-            z[:,d:] = 0
+                rho_next = rho_next / torch.exp(z[:,d])
+            z = pad(z[:,0:d], (0,3,0,0), value=0)
         tk = 0
         for k in range(nt):
             z = stepRK4(odefun, z, net, alph, tk, tk + h)
@@ -231,8 +229,8 @@ def OTFlowProblemGradientFlowsPorous(x, rho, Phi, tspan , nt, tau, n_tau, net_li
     #     print("z:", torch.max(z[:,d].exp()), torch.min(z[:,d].exp()))
 
     # rho_next = rho_next / torch.exp(z[:,d])
-    # rho_next = torch.exp(torch.log(rho) - z[:,d] ) + 1e-4
-    rho_next = torch.exp(z[:,d])
+    rho_next = rho_next / torch.exp(z[:,d]) + 1e-5
+    # rho_next = torch.exp(z[:,d])
 
     cost1 = (compute_U(rho_next,Tx) / (rho_next)).mean()
     # cost2 = - torch.exp( - (Tx.view((n, 1, d)) - Tx.view((1, n, d))).square().mean(dim = 2) ).mean() / math.pi
