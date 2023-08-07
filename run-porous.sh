@@ -1,4 +1,4 @@
-python train-porous.py --data=porous --viz_freq=2000 --lr=1e-5 --tau=0.01 --n_tau=0 --niter=20000
+# python train-porous.py --data=porous --viz_freq=2000 --lr=1e-5 --tau=0.01 --n_tau=0 --niter=20000
 python train-porous.py --data=porous --viz_freq=500 --lr=1e-5 --tau=0.01 --n_tau=1 --niter=20000
 python train-porous.py --data=porous --viz_freq=500 --lr=1e-5 --tau=0.01 --n_tau=2 --niter=20000
 python train-porous.py --data=porous --viz_freq=500 --lr=1e-5 --tau=0.01 --n_tau=3 --niter=20000
